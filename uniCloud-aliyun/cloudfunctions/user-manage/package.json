@@ -1,0 +1,10 @@
+{
+  "name": "user-manage",
+  "version": "1.0.0",
+  "description": "用户管理（uni-id 用户系统）",
+  "main": "index.js",
+  "dependencies": {
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common"
+  }
+}

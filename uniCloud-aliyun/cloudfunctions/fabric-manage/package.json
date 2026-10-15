@@ -1,0 +1,11 @@
+{
+  "name": "fabric-manage",
+  "version": "1.0.0",
+  "description": "面料产品管理（品名/颜色 CRUD，云对象）",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common"
+  }
+}

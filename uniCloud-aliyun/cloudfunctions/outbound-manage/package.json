@@ -1,0 +1,12 @@
+{
+  "name": "outbound-manage",
+  "version": "1.0.0",
+  "description": "出库单管理（登记/列表/确认出库，云对象）",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "notify-common": "file:../common/notify-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common"
+  }
+}

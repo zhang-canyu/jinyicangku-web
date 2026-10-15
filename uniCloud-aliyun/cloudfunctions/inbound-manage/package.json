@@ -1,0 +1,11 @@
+{
+  "name": "inbound-manage",
+  "version": "1.0.0",
+  "description": "入库单管理（登记/列表/确认入库，云对象）",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common"
+  }
+}

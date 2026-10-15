@@ -1,0 +1,8 @@
+.hbuilderx
+scripts
+unpackage
+node_modules
+package-lock.json
+.idea
+.vscode
+.uni-devtools

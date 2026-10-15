@@ -1,0 +1,16 @@
+{
+  "name": "stocktake-manage",
+  "version": "1.0.0",
+  "description": "库存盘点（库位总览/单库位盘点/保存盘点结果，云对象）",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common"
+  },
+  "cloudfunction-config": {
+    "concurrency": 2,
+    "timeout": 60,
+    "memorySize": 512
+  }
+}

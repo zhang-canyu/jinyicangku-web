@@ -1,0 +1,12 @@
+{
+  "name": "printer-manage",
+  "version": "1.0.0",
+  "description": "打印机与云打印任务管理（云对象）：绑定/列表、出库单云推送（芯烨xpyun）、任务回查",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common",
+    "xpyun-print": "file:../common/xpyun-print"
+  }
+}

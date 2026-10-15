@@ -1,0 +1,12 @@
+{
+  "name": "dict-manage",
+  "version": "1.0.0",
+  "description": "字典管理云对象（合并自 customer-manage / location-manage / printer-manage；高频业务云函数仍独立）",
+  "main": "index.obj.js",
+  "dependencies": {
+    "auth-common": "file:../common/auth-common",
+    "uni-config-center": "file:../common/uni-config-center",
+    "uni-id-common": "file:../common/uni-id-common",
+    "xpyun-print": "file:../common/xpyun-print"
+  }
+}

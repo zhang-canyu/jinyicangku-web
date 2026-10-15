@@ -1,0 +1,1 @@
+{"name":"notify-common","version":"1.0.0","description":"订阅消息通知公共模块：出库单状态变更通知（access_token 管理、订阅消息发送、notify-log 兜底落库）","main":"index.js","dependencies":{"uni-config-center":"file:../uni-config-center"}}

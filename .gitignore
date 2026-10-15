@@ -1,0 +1,25 @@
+node_modules/
+unpackage/
+dev-script/
+uni-admin.param.json
+/* ── 密钥 / 隐私配置：禁止入库（含 uni-id 密码与 token 密钥、云打印 appkey）── */
+uniCloud-aliyun/cloudfunctions/common/uni-config-center/uni-id/config.json
+uniCloud-aliyun/cloudfunctions/common/uni-config-center/uni-xpyun/config.json
+uni_modules/uni-config-center/uniCloud/cloudfunctions/common/uni-config-center/uni-id/config.json
+uni_modules/uni-config-center/uniCloud/cloudfunctions/common/uni-config-center/uni-open-bridge/config.json
+uniCloud-aliyun/cloudfunctions/common/uni-config-center/uni-open-bridge/
+uniCloud-aliyun/cloudfunctions/**/*.param.json
+uniCloud-aliyun/cloudfunctions/common/uni-pay/**/config.json
+.hbuilderx/
+mock/
+db_query.jql
+pages/system/.DS_Store
+manifest.json
+.idea
+.vscode
+test-cron/
+uni-stat-receiver.param.js
+.uni-devtools
+test-cron-sync/
+.DS_Store
+test-version.jql

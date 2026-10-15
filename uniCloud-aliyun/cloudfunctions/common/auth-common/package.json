@@ -1,0 +1,1 @@
+{"name":"auth-common","version":"1.0.0","description":"进销存统一鉴权与返回结构公共模块：ok/fail、getActor、checkLogin、checkAdmin、checkStaff、checkEditor、isStaff/isEditor/isSalesRole/actorName","main":"index.js","dependencies":{"uni-id-common":"file:../uni-id-common"}}
