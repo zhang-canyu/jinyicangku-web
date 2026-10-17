@@ -54,10 +54,9 @@
 							</view>
 							<view class="detail-ops">
 								<text class="op-link" @click="openEdit(selectedFabric)">编辑</text>
-								<text class="op-link op-danger" @click="confirmRemoveFabric(selectedFabric)">删除</text>
 								<button class="btn-primary btn-sm" @click="openLabelPrint(selectedFabric)">
 									<text class="btn-primary-icon">🖨</text>
-									<text>打码单</text>
+									<text>打印标签</text>
 								</button>
 								<button class="btn-primary btn-sm" @click="openAddColor(selectedFabric)">
 									<text class="btn-primary-icon">＋</text>
@@ -159,9 +158,9 @@
 						:focus="editFocus" @confirm="submitEdit" />
 				</template>
 
-				<!-- 品名模式：品名 + 规格三字段（规格供打码单自动带出） -->
+				<!-- 品名模式：品名 + 规格三字段（规格供打印标签自动带出） -->
 				<template v-else>
-					<view class="edit-sub">规格字段用于打码单自动带出，可留空</view>
+					<view class="edit-sub">规格字段用于打印标签自动带出，可留空</view>
 					<view class="edit-fields">
 						<view class="edit-field">
 							<text class="edit-field-label">品名</text>
@@ -215,6 +214,9 @@ const fabricCo = uniCloud.importObject('fabric-manage', { customUI: true })
 
 /* 搜索防抖（ms） */
 const SEARCH_DEBOUNCE = 300
+/* onShow 节流窗口（ms）：品名是低频变更字典数据，距上次拉取不足该值则跳过，
+ * 避免页面间频繁切换重复拉全量（新增/编辑后是主动 load()，不受此限制） */
+const LOAD_THROTTLE_MS = 30000
 
 /* ── 规格字段默认单位（门幅 cm / 克重 g）
  * 输入框只填数值，单位在右侧常驻展示，提交时自动补齐；
@@ -242,8 +244,12 @@ export default {
 	data() {
 		return {
 			keyword: '',
+			/* allList = 云端全量品名（含颜色树）；list = 本地按 keyword 过滤后的展示列表
+			 * 搜索走本地过滤，不再每次输入都打云端 */
+			allList: [],
 			list: [],
 			loading: false,
+			lastLoadAt: 0,        // 上次拉取时间戳（onShow 节流用）
 			selectedId: '',       // 当前选中品名 id（右栏渲染对象）
 			/* 编辑弹窗状态 */
 			editMode: '',         // '' | addFabric | edit | addColor
@@ -277,25 +283,34 @@ export default {
 		},
 	},
 	onShow() {
+		if (Date.now() - this.lastLoadAt < LOAD_THROTTLE_MS) return
 		this.load()
 	},
 	methods: {
 		/* ── 数据 ── */
+		/* 拉取云端全量品名（keyword 留空：过滤交给 applyFilter 在本地做） */
 		async load(preselectId) {
+			this.lastLoadAt = Date.now()
 			this.loading = true
 			try {
-				const res = await fabricCo.list({ keyword: this.keyword })
-				if (res && res.code === 0) {
-					this.list = res.data.list || []
-				} else {
-					this.list = []
-				}
+				const res = await fabricCo.list({ keyword: '' })
+				this.allList = (res && res.code === 0 && res.data.list) || []
 			} catch (e) {
-				this.list = []
+				this.allList = []
 			} finally {
 				this.loading = false
 			}
+			this.applyFilter()
 			this.ensureSelection(preselectId)
+		},
+		/* 本地过滤：与云端 filter 同口径 —— 品名名包含关键词，或任一颜色名包含关键词 */
+		applyFilter() {
+			const q = String(this.keyword || '').trim()
+			const src = this.allList || []
+			this.list = q
+				? src.filter((f) => (f.name || '').includes(q) || (f.colors || []).some((c) => (c.name || '').includes(q)))
+				: src.slice()
+			this.ensureSelection()
 		},
 		/* 选中态维护：优先 preselectId（新增后选中新项），否则保持当前选中，失效时回落到第一条 */
 		ensureSelection(preselectId) {
@@ -307,14 +322,14 @@ export default {
 				this.selectedId = this.list.length ? this.list[0].id : ''
 			}
 		},
-		/* 输入防抖：停止输入 300ms 后自动搜索 */
+		/* 输入防抖：停止输入 300ms 后本地过滤（数据已在内存，不再请求云端） */
 		onSearchInput() {
 			clearTimeout(this.searchTimer)
-			this.searchTimer = setTimeout(() => this.load(), SEARCH_DEBOUNCE)
+			this.searchTimer = setTimeout(() => this.applyFilter(), SEARCH_DEBOUNCE)
 		},
 		clearSearch() {
 			this.keyword = ''
-			this.load()
+			this.applyFilter()
 		},
 		selectFabric(f) {
 			this.selectedId = f.id
@@ -336,7 +351,7 @@ export default {
 			this.$refs.editPopup.open()
 			this.focusInput()
 		},
-		/* 编辑品名：改名 + 产品编号 / 门幅 / 克重（规格供打码单自动带出） */
+		/* 编辑品名：改名 + 产品编号 / 门幅 / 克重（规格供打印标签自动带出） */
 		openEdit(f) {
 			this.editMode = 'edit'
 			this.editFabric = f
@@ -415,29 +430,6 @@ export default {
 			}
 		},
 
-		/* ── 删除（确认后调用，后端校验库存引用） ── */
-		confirmRemoveFabric(f) {
-			uni.showModal({
-				title: '删除品名',
-				content: `确定删除「${f.name}」？存在库存记录时无法删除。`,
-				confirmText: '删除',
-				success: async (m) => {
-					if (!m.confirm) return
-					try {
-						const res = await fabricCo.removeFabric({ id: f.id })
-						if (res && res.code === 0) {
-							uni.showToast({ title: '已删除', icon: 'success' })
-							// 删除当前选中项后 ensureSelection 自动回落到第一条
-							this.load()
-						} else {
-							uni.showToast({ title: (res && res.message) || '删除失败', icon: 'none' })
-						}
-					} catch (e) {
-						uni.showToast({ title: (e && e.message) || '删除失败', icon: 'none' })
-					}
-				},
-			})
-		},
 		confirmRemoveColor(f, c) {
 			uni.showModal({
 				title: '移除颜色',

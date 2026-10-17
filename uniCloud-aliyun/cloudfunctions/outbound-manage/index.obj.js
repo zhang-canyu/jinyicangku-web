@@ -670,6 +670,180 @@ module.exports = {
 		})
 	},
 
+	/* ── 接口：近 N 天每日出库条数（首页曲线图）
+	 * 口径与报表（report-manage）的「条数」列严格一致：
+	 *   source !== 'sample'（$ne 同时覆盖历史缺省该字段的单）且 status = '已发货'
+	 *   → 大货 / 直接出库 / 返厂（返厂也是出仓，报表同样计入）
+	 *   打样单（source === 'sample'、status = '已完成'）不计入条数：
+	 *     打样为开剪取样，其 count 是「剪样段数」而非真实出库条数，报表亦只计米数不计条数
+	 * 归日按完成时间 update_date（东八区，与报表、首页今日出货同一口径）
+	 * 参数：days（默认 7，上限 30）
+	 * 返回：{ list: [{ date: 'YYYY-MM-DD', label: 'MM-DD', count }] }，无数据的日子补 0 ── */
+	async dailyOutCount(params) {
+		const actor = await getActor(this)
+		if (actor.fail) return actor.fail
+		const days = Math.min(30, Math.max(1, parseInt((params || {}).days, 10) || 7))
+		const cmd = uniCloud.database().command
+		const p = (x) => String(x).padStart(2, '0')
+		/* 时间戳 → 东八区日期字符串（云函数默认 UTC+0，需 +8h 再取 UTC 日期） */
+		const dayKey = (ts) => {
+			const d = new Date(Number(ts) + 8 * 3600 * 1000)
+			return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+		}
+		const todayStart = Date.parse(`${dayKey(Date.now())}T00:00:00+08:00`)
+		const start = todayStart - (days - 1) * 24 * 3600 * 1000
+		const end = todayStart + 24 * 3600 * 1000
+		/* 区间内的已发货单分页取回（1000/批）后在内存按日累加：
+		 * 云函数端 get 单批上限 1000，15 天以上区间在大单量下会超出，不分页会被静默截断导致少算；
+		 * 同时避免聚合里做日期格式化（阿里云聚合对日期函数支持有限） */
+		const BATCH = 1000
+		const shipMap = {}
+		let offset = 0
+		for (;;) {
+			const res = await orderCol()
+				.where({ source: cmd.neq('sample'), status: '已发货', update_date: cmd.gte(start).and(cmd.lt(end)) })
+				.field({ count: true, update_date: true })
+				.skip(offset)
+				.limit(BATCH)
+				.get()
+			const rows = res.data || []
+			rows.forEach((r) => {
+				const k = dayKey(r.update_date || 0)
+				shipMap[k] = (shipMap[k] || 0) + (Number(r.count) || 0)
+			})
+			if (rows.length < BATCH) break
+			offset += BATCH
+		}
+		const list = []
+		for (let i = days - 1; i >= 0; i--) {
+			const date = dayKey(todayStart - i * 24 * 3600 * 1000)
+			list.push({ date, label: date.slice(5), count: shipMap[date] || 0 })
+		}
+		return ok({ list })
+	},
+
+	/* ── 接口：近 N 天客户出货量排名（首页柱状图）
+	 * 口径与 dailyOutCount / 报表条数列完全一致：
+	 *   source≠sample 且 status='已发货'（打样单 count 是剪样段数，不计入条数）
+	 *   按完成时间 update_date（东八区）取近 N 天
+	 * 参数：days（默认 30，上限 90）、limit（默认 10，上限 20）
+	 * 返回：{ list: [{ customer, count, meters }] }，按条数降序；客户名为空归到「未填写客户」 ── */
+	async topCustomerOut(params) {
+		const actor = await getActor(this)
+		if (actor.fail) return actor.fail
+		const days = Math.min(90, Math.max(1, parseInt((params || {}).days, 10) || 30))
+		const limit = Math.min(20, Math.max(1, parseInt((params || {}).limit, 10) || 10))
+		const cmd = uniCloud.database().command
+		const p = (x) => String(x).padStart(2, '0')
+		const dayKey = (ts) => {
+			const d = new Date(Number(ts) + 8 * 3600 * 1000)
+			return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+		}
+		const todayStart = Date.parse(`${dayKey(Date.now())}T00:00:00+08:00`)
+		const start = todayStart - (days - 1) * 24 * 3600 * 1000
+		const end = todayStart + 24 * 3600 * 1000
+		/* 分页取回（1000/批）后按客户在内存聚合：30 天区间单据量可能超单批上限，
+		 * 不分页会被静默截断导致排名偏小 */
+		const BATCH = 1000
+		const agg = {}
+		let offset = 0
+		for (;;) {
+			const res = await orderCol()
+				.where({ source: cmd.neq('sample'), status: '已发货', update_date: cmd.gte(start).and(cmd.lt(end)) })
+				.field({ customer: true, count: true, total_meters: true })
+				.skip(offset)
+				.limit(BATCH)
+				.get()
+			const rows = res.data || []
+			rows.forEach((r) => {
+				const k = String(r.customer || '').trim() || '未填写客户'
+				if (!agg[k]) agg[k] = { customer: k, count: 0, meters: 0 }
+				agg[k].count += Number(r.count) || 0
+				agg[k].meters += Number(r.total_meters) || 0
+			})
+			if (rows.length < BATCH) break
+			offset += BATCH
+		}
+		const list = Object.keys(agg)
+			.map((k) => ({ customer: agg[k].customer, count: agg[k].count, meters: parseFloat(agg[k].meters.toFixed(1)) }))
+			/* 条数降序；条数相同则用米数再比一次，保证排序稳定 */
+			.sort((a, b) => (b.count - a.count) || (b.meters - a.meters))
+			.slice(0, limit)
+		return ok({ list })
+	},
+
+	/* ── 接口：近 N 天产品（品名）出库排名（首页柱状图，与客户排名并排）
+	 * 口径与 topCustomerOut / dailyOutCount / 报表条数列一致：source≠sample + 已发货 + update_date 近 N 天
+	 * 品名只存在于 order_item 明细，主表无该字段 → 需两步：
+	 *   1) 主表按口径取 order_id 集合（分页）
+	 *   2) 明细表按 order_id 分批 in 查询（批内再分页），按 name 聚合
+	 * 明细行条数取 count || rolls.length、米数取 total_meters || sum(rolls)，与 calcSummary 同源
+	 * 参数：days（默认 30，上限 90）、limit（默认 10，上限 20）
+	 * 返回：{ list: [{ product, count, meters }] }，按条数降序 ── */
+	async topProductOut(params) {
+		const actor = await getActor(this)
+		if (actor.fail) return actor.fail
+		const days = Math.min(90, Math.max(1, parseInt((params || {}).days, 10) || 30))
+		const limit = Math.min(20, Math.max(1, parseInt((params || {}).limit, 10) || 10))
+		const cmd = uniCloud.database().command
+		const p = (x) => String(x).padStart(2, '0')
+		const dayKey = (ts) => {
+			const d = new Date(Number(ts) + 8 * 3600 * 1000)
+			return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+		}
+		const todayStart = Date.parse(`${dayKey(Date.now())}T00:00:00+08:00`)
+		const start = todayStart - (days - 1) * 24 * 3600 * 1000
+		const end = todayStart + 24 * 3600 * 1000
+		const BATCH = 1000
+
+		/* 1) 主表：近 N 天已发货单的 _id */
+		const ids = []
+		let offset = 0
+		for (;;) {
+			const res = await orderCol()
+				.where({ source: cmd.neq('sample'), status: '已发货', update_date: cmd.gte(start).and(cmd.lt(end)) })
+				.field({ _id: true })
+				.skip(offset)
+				.limit(BATCH)
+				.get()
+			const rows = res.data || []
+			rows.forEach((r) => ids.push(r._id))
+			if (rows.length < BATCH) break
+			offset += BATCH
+		}
+		if (!ids.length) return ok({ list: [] })
+
+		/* 2) 明细表：order_id 分批 in（每批 50 单，避免 in 数组过长；批内再分页防 1000 截断） */
+		const agg = {}
+		const IN_BATCH = 50
+		for (let i = 0; i < ids.length; i += IN_BATCH) {
+			const part = ids.slice(i, i + IN_BATCH)
+			let off = 0
+			for (;;) {
+				const res = await itemCol()
+					.where({ order_id: cmd.in(part) })
+					.field({ name: true, count: true, rolls: true, total_meters: true })
+					.skip(off)
+					.limit(BATCH)
+					.get()
+				const rows = res.data || []
+				rows.forEach((r) => {
+					const k = String(r.name || '').trim() || '未填写品名'
+					if (!agg[k]) agg[k] = { product: k, count: 0, meters: 0 }
+					agg[k].count += Number(r.count) || (r.rolls || []).length || 0
+					agg[k].meters += Number(r.total_meters) || parseFloat((r.rolls || []).reduce((s, v) => s + v, 0).toFixed(1))
+				})
+				if (rows.length < BATCH) break
+				off += BATCH
+			}
+		}
+		const list = Object.keys(agg)
+			.map((k) => ({ product: agg[k].product, count: agg[k].count, meters: parseFloat(agg[k].meters.toFixed(1)) }))
+			.sort((a, b) => (b.count - a.count) || (b.meters - a.meters))
+			.slice(0, limit)
+		return ok({ list })
+	},
+
 	/* ── 接口：出库单列表（主表一单一行，天然准确分页）
 	 * 参数：keyword 搜索单号/客户/品名/颜色；
 	 *      date 精确日期筛选（YYYY-MM-DD）；

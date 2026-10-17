@@ -1,7 +1,9 @@
 <template>
 	<scroll-view class="sidebar" scroll-y="true">
+		<!-- unique-opened：手风琴模式，展开某个子菜单时自动收拢其他已展开的子菜单 -->
 		<uni-data-menu ref="menu" :value="currentMenu" :staticMenu="staticMenu" collection="opendb-admin-menus"
-			:page-size="500" :field="field" where="enable==true" orderby="sort asc" active-text-color="#409eff" @select="select">
+			:unique-opened="true" :page-size="500" :field="field" where="enable==true" orderby="sort asc"
+			active-text-color="#409eff" @select="select">
 		</uni-data-menu>
 	</scroll-view>
 </template>

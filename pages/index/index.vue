@@ -12,70 +12,54 @@
 			<uni-notice-bar v-if="showdbInit" showGetMore showIcon class="mb-m pointer" text="检测到您未初始化db_init.json，请先右键uniCloud/database/db_init.json文件，执行初始化云数据库，否则左侧无法显示菜单等数据" background-color="#fef0f0" color="#f56c6c" @click="toAddAppId" />
 			<!-- 提示条2：添加应用 -->
 			<uni-notice-bar v-if="showAddAppId" showGetMore showIcon class="mb-m pointer" text="检测到您还未添加应用，点击前往应用管理添加" @click="toAddAppId" />
-			<!-- 提示条3：暂无数据，需开通统计功能 -->
-			<uni-notice-bar v-if="!deviceTableData.length && !userTableData.length && !query.platform_id && complete" showGetMore showIcon class="mb-m pointer"
-				text="暂无数据, 统计相关功能需开通 uni 统计后才能使用, 如未开通, 点击查看具体流程" @click="navTo('https://uniapp.dcloud.io/uni-stat-v2.html')" />
+			<!-- 近 30 天每日出库条数曲线（云端按东八区「已发货」时间归日统计出货条数） -->
+			<view class="uni-stat--x p-m mb-m">
+				<view class="uni-stat-card-header">
+					<text>近 30 天出库条数</text>
+					<text v-if="!outChartLoading && !outChartError" class="out-chart-total">合计 {{ outTotal }} 条</text>
+				</view>
+				<view class="out-chart-box">
+					<text v-if="outChartLoading" class="out-chart-tip">加载中…</text>
+					<text v-else-if="outChartError" class="out-chart-tip out-chart-tip-err">{{ outChartError }}</text>
+					<text v-else-if="!outTotal" class="out-chart-tip">近 30 天暂无出库记录</text>
+					<qiun-data-charts v-else type="line" :chartData="outChartData" :opts="outChartOpts"
+						:errorMessage="outChartError" />
+				</view>
+			</view>
 
-			<view class="uni-stat--x mb-m">
-				<!-- 平台选择标签 -->
-				<uni-stat-tabs label="平台选择" type="boldLine" mode="platform" v-model="query.platform_id" />
-			</view>
-			<view class="uni-stat--x p-m">
-				<view class="uni-stat-card-header">设备概览</view>
-				<!-- 设备概览表格 -->
-				<uni-table :loading="loading" border stripe emptyText="暂无数据">
-					<uni-tr>
-						<block v-for="(mapper, index) in deviceTableFields" :key="index">
-							<!-- 表头列 -->
-							<uni-th v-if="mapper.title" :key="index" align="center">
-								{{mapper.title}}
-							</uni-th>
-						</block>
-					</uni-tr>
-					<uni-tr v-for="(item ,i) in deviceTableData" :key="i">
-						<block v-for="(mapper, index) in deviceTableFields" :key="index">
-							<uni-td v-if="mapper.field === 'appid'" align="center">
-								<view v-if="item.appid" @click="navTo('/pages/uni-stat/device/overview/overview', item.appid)" class="link-btn-color">
-									{{item[mapper.field] !== undefined ? item[mapper.field] : '-'}}
-								</view>
-								<view v-else @click="navTo('/pages/system/app/add')" class="link-btn-color">
-									需添加此应用的 appid
-								</view>
-							</uni-td>
-							<uni-td v-else :key="index" align="center">
-								{{item[mapper.field] !== undefined ? item[mapper.field] : '-'}}
-							</uni-td>
-						</block>
-					</uni-tr>
-				</uni-table>
-			</view>
-			<view class="uni-stat--x p-m">
-				<view class="uni-stat-card-header">注册用户概览</view>
-				<!-- 注册用户概览表格 -->
-				<uni-table :loading="loading" border stripe emptyText="暂无数据">
-					<uni-tr>
-						<block v-for="(mapper, index) in userTableFields" :key="index">
-							<uni-th v-if="mapper.title" :key="index" align="center">
-								{{mapper.title}}
-							</uni-th>
-						</block>
-					</uni-tr>
-					<uni-tr v-for="(item ,i) in userTableData" :key="i">
-						<block v-for="(mapper, index) in userTableFields" :key="index">
-							<uni-td v-if="mapper.field === 'appid'" align="center">
-								<view v-if="item.appid" @click="navTo('/pages/uni-stat/user/overview/overview', item.appid)" class="link-btn-color">
-									{{item[mapper.field] !== undefined ? item[mapper.field] : '-'}}
-								</view>
-								<view v-else @click="navTo('/pages/system/app/add')" class="link-btn-color">
-									需添加此应用的 appid
-								</view>
-							</uni-td>
-							<uni-td v-else :key="index" align="center">
-								{{item[mapper.field] !== undefined ? item[mapper.field] : '-'}}
-							</uni-td>
-						</block>
-					</uni-tr>
-				</uni-table>
+			<!-- 排名区：客户（左）/ 产品（右）并排，两者口径一致，各自独立加载与降级 -->
+			<view class="rank-row mb-m">
+				<view class="uni-stat--x p-m rank-col">
+					<view class="uni-stat-card-header">
+						<text>近 30 天客户出货排名</text>
+						<text v-if="!custChartLoading && !custChartError && custList.length" class="out-chart-total">
+							Top {{ custList.length }} · {{ custTotal }} 条
+						</text>
+					</view>
+					<view class="cust-chart-box">
+						<text v-if="custChartLoading" class="out-chart-tip">加载中…</text>
+						<text v-else-if="custChartError" class="out-chart-tip out-chart-tip-err">{{ custChartError }}</text>
+						<text v-else-if="!custList.length" class="out-chart-tip">近 30 天暂无客户出货记录</text>
+						<qiun-data-charts v-else type="column" :chartData="custChartData" :opts="custChartOpts"
+							:errorMessage="custChartError" />
+					</view>
+				</view>
+
+				<view class="uni-stat--x p-m rank-col">
+					<view class="uni-stat-card-header">
+						<text>近 30 天产品出库排名</text>
+						<text v-if="!prodChartLoading && !prodChartError && prodList.length" class="out-chart-total">
+							Top {{ prodList.length }} · {{ prodTotal }} 条
+						</text>
+					</view>
+					<view class="cust-chart-box">
+						<text v-if="prodChartLoading" class="out-chart-tip">加载中…</text>
+						<text v-else-if="prodChartError" class="out-chart-tip out-chart-tip-err">{{ prodChartError }}</text>
+						<text v-else-if="!prodList.length" class="out-chart-tip">近 30 天暂无产品出库记录</text>
+						<qiun-data-charts v-else type="column" :chartData="prodChartData" :opts="prodChartOpts"
+							:errorMessage="prodChartError" />
+					</view>
+				</view>
 			</view>
 		</view>
 
@@ -86,246 +70,171 @@
 </template>
 
 <script>
-	import {
-		stringifyQuery,
-		stringifyField,
-		stringifyGroupField,
-		getTimeOfSomeDayAgo,
-		division,
-		format,
-		parseDateTime,
-		getFieldTotal,
-		debounce
-	} from '@/js_sdk/uni-stat/util.js'
+	/* 出库云对象：customUI 让错误由调用方处理（首页失败时降级为文案提示，不弹 toast 打断统计加载） */
+	const outboundCo = uniCloud.importObject('outbound-manage', { customUI: true })
 
-	import {
-		deviceFeildsMap,
-		userFeildsMap
-	} from './fieldsMap.js'
+	/* 柱顶名称截断：超过 6 字取前 5 字 + 省略号
+	 * 两个排名图并排后每栏只剩半宽，名称不打招呼会与邻柱文字重叠 */
+	function shortName(n) {
+		const s = String(n || '')
+		return s.length > 6 ? `${s.slice(0, 5)}…` : s
+	}
 
 	export default {
 		data() {
 			return {
-				query: {
-					platform_id: '',
-					start_time: [getTimeOfSomeDayAgo(1), new Date().getTime()]
-				},
-				deviceTableData: [],
-				userTableData: [],
-				// panelData: panelOption,
-				// 每页数据量
-				pageSize: 10,
-				// 当前页
-				pageCurrent: 1,
-				// 数据总量
-				total: 0,
-				loading: false,
-				complete: false,
-				statSetting: {
-					mode: "",
-					day: 7
-				},
-				statModeList: [
-					{ "value": "open", "text": "开启" },
-					{ "value": "close", "text": "关闭" },
-					{ "value": "auto", "text": "节能" },
-				],
 				showAddAppId: false,
-				showdbInit: false
+				showdbInit: false,
+				/* 近 30 天出库条数曲线 */
+				outChartLoading: false,
+				outChartError: '',
+				outTotal: 0,
+				outChartData: { categories: [], series: [] },
+				outChartOpts: {
+					color: ['#2979ff'],
+					padding: [15, 15, 10, 5],
+					enableScroll: false,
+					legend: { show: false },
+					/* labelCount：30 个日期标签全显示会重叠，强制稀疏成 ~10 个（自动隔位采样） */
+					xAxis: { disableGrid: true, fontSize: 11, lineHeight: 20, fontColor: '#909399', labelCount: 10 },
+					yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0 }] },
+					extra: { line: { type: 'curve', width: 2, activeType: 'hollow' } },
+				},
+				/* 近 30 天客户出货量排名 */
+				custChartLoading: false,
+				custChartError: '',
+				custList: [],
+				custTotal: 0,
+				custChartData: { categories: [], series: [] },
+				custChartOpts: {
+					color: ['#2979ff'],
+					padding: [15, 15, 10, 5],
+					enableScroll: false,
+					legend: { show: false },
+					/* 名称改由 series.formatter 直接标在柱顶，X 轴不再重复显示名称 */
+					xAxis: { disabled: true, disableGrid: true },
+					yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0 }], fontSize: 11, fontColor: '#909399' },
+					/* 注意：type="column" 时必须配 extra.column（源码取 opts.extra.column.labelPosition），
+					 * 沿用 extra.bar 会因读取 undefined 属性而报错 */
+					extra: { column: { type: 'group', width: 18, activeBgColor: '#000000', activeBgOpacity: 0.08 } },
+				},
+				/* 近 30 天产品出库排名（与上面客户排名同款配置，各自独立一份避免图表实例互相干扰） */
+				prodChartLoading: false,
+				prodChartError: '',
+				prodList: [],
+				prodTotal: 0,
+				prodChartData: { categories: [], series: [] },
+				prodChartOpts: {
+					color: ['#67c23a'],
+					padding: [15, 15, 10, 5],
+					enableScroll: false,
+					legend: { show: false },
+					xAxis: { disabled: true, disableGrid: true },
+					yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0 }], fontSize: 11, fontColor: '#909399' },
+					extra: { column: { type: 'group', width: 18, activeBgColor: '#000000', activeBgOpacity: 0.08 } },
+				},
 			}
 		},
 		onReady() {
-			// 创建一个防抖函数，延迟执行getAllData方法
-			this.debounceGet = debounce(() => {
-				this.getAllData(this.queryStr);
-			}, 300);
-
-			// 执行防抖函数
-			this.debounceGet();
-
 			// 检查appId
 			this.checkAppId();
 
 			this.checkdbInit();
-		},
 
-		watch: {
-			query: {
-				deep: true,
-				handler(newVal) {
-					// 监听query对象的变化，并在变化时执行防抖函数
-					this.debounceGet(this.queryStr);
-				}
-			}
-		},
+			// 近 30 天出库条数曲线
+			this.loadOutChart();
 
-		computed: {
-			queryStr() {
-				// 默认查询条件
-				const defQuery = `(dimension == "hour" || dimension == "day")`;
-				// 将query对象转换为查询字符串并与默认查询条件合并
-				return stringifyQuery(this.query) + ' && ' + defQuery;
-			},
+			// 近 30 天客户出货量排名
+			this.loadCustChart();
 
-			deviceTableFields() {
-				// 返回设备表格的字段映射
-				return this.tableFieldsMap(deviceFeildsMap);
-			},
-
-			userTableFields() {
-				// 返回用户表格的字段映射
-				return this.tableFieldsMap(userFeildsMap);
-			}
+			// 近 30 天产品出库排名
+			this.loadProdChart();
 		},
 
 		methods: {
-			getAllData(queryStr) {
-				// 获取设备数据
-				this.getApps(this.queryStr, deviceFeildsMap, 'device');
-				// 获取用户数据
-				this.getApps(this.queryStr, userFeildsMap, 'user');
-			},
-
-			tableFieldsMap(fieldsMap) {
-				let tableFields = [];
-				const today = [];
-				const yesterday = [];
-				const other = [];
-
-				for (const mapper of fieldsMap) {
-					if (mapper.field) {
-						if (mapper.hasOwnProperty('value')) {
-							// 如果字段映射中有'value'属性，则根据映射生成今天和昨天的字段
-							const t = JSON.parse(JSON.stringify(mapper));
-							const y = JSON.parse(JSON.stringify(mapper));
-
-							if (mapper.field !== 'total_users' && mapper.field !== 'total_devices') {
-								t.title = '今日' + mapper.title;
-								t.field = mapper.field + '_value';
-								y.title = '昨日' + mapper.title;
-								y.field = mapper.field + '_contrast';
-
-								today.push(t);
-								yesterday.push(y);
-							} else {
-								t.field = mapper.field + '_value';
-								other.push(t);
-							}
-						} else {
-							// 将其他字段直接添加到tableFields中
-							tableFields.push(mapper);
-						}
+			/* 近 30 天每日出库条数：口径与报表条数列一致
+			 * （source≠sample + 已发货；打样单 count 是剪样段数，不计入条数）
+			 * 加载失败只降级为卡片内文案提示，不影响页面其他模块 */
+			async loadOutChart() {
+				this.outChartLoading = true
+				this.outChartError = ''
+				try {
+					const res = await outboundCo.dailyOutCount({ days: 30 })
+					// 云端 ok() 返回 { code, message, data }，列表在 res.data.list（不是 res.list）
+					const list = (res && res.code === 0 && res.data && res.data.list) || []
+					this.outTotal = list.reduce((s, d) => s + (d.count || 0), 0)
+					this.outChartData = {
+						categories: list.map((d) => d.label),
+						series: [{ name: '出库条数', data: list.map((d) => d.count || 0) }],
 					}
+				} catch (e) {
+					this.outChartError = (e && e.message) || '加载失败'
+				} finally {
+					this.outChartLoading = false
 				}
+				},
 
-				// 按顺序合并所有的字段
-				tableFields = [...tableFields, ...today, ...yesterday, ...other];
-
-				return tableFields;
-			},
-
-
-			getApps(query, fieldsMap, type = "device") {
-				this.loading = true
-				const db = uniCloud.database()
-				const appDaily = db.collection('uni-stat-result').where(query).getTemp();
-				const appList = db.collection('opendb-app-list').getTemp()
-				db.collection(appDaily, appList)
-					.field(
-						`${stringifyField(fieldsMap, '', 'value')},stat_date,appid,dimension`
-					)
-					.groupBy(`appid,dimension,stat_date`)
-					.groupField(stringifyGroupField(fieldsMap, '', 'value'))
-					.orderBy(`appid`, 'desc')
-					.get()
-					.then((res) => {
-						let {
-							data
-						} = res.result
-						//console.log('data: ', data)
-						this[`${type}TableData`] = []
-						if (!data.length) return
-						let appids = [],
-							todays = [],
-							yesterdays = [],
-							isToday = parseDateTime(getTimeOfSomeDayAgo(0), '', ''),
-							isYesterday = parseDateTime(getTimeOfSomeDayAgo(1), '', '')
-						for (const item of data) {
-							const {
-								appid,
-								name
-							} = item.appid && item.appid[0] || {}
-							item.appid = appid
-							item.name = name
-
-							if (appids.indexOf(item.appid) < 0) {
-								appids.push(item.appid)
-							}
-							if (item.dimension === 'hour' && item.stat_date === isToday) {
-								todays.push(item)
-							}
-							if (item.dimension === 'day' && item.stat_date === isYesterday) {
-								yesterdays.push(item)
-							}
-						}
-						const keys = fieldsMap.map(f => f.field).filter(Boolean)
-						for (const appid of appids) {
-							const rowData = {}
-							const t = todays.find(item => item.appid === appid)
-							const y = yesterdays.find(item => item.appid === appid)
-							for (const key of keys) {
-								if (key === 'appid' || key === 'name') {
-									rowData[key] = t && t[key]
-								} else {
-									const value = t && t[key]
-									const contrast = y && y[key]
-									rowData[key + '_value'] = format(value)
-									rowData[key + '_contrast'] = format(contrast)
-								}
-							}
-							if (appid) {
-								rowData[`total_${type}s_value`] = "获取中...";
-							}
-							this[`${type}TableData`].push(rowData);
-							if (appid) {
-								// total_users 不准确，置空后由 getFieldTotal 处理, appid 不存在时暂不处理
-								t[`total_${type}s`] = 0
-								const query = JSON.parse(JSON.stringify(this.query))
-								query.start_time = [getTimeOfSomeDayAgo(0), new Date().getTime()]
-								query.appid = appid
-								getFieldTotal.call(this, query, `total_${type}s`).then(total => {
-									this[`${type}TableData`].find(item => item.appid === appid)[
-										`total_${type}s_value`] = total
-								})
-							}
-						}
-					}).catch((err) => {
-						console.error(err)
-						// err.message 错误信息
-						// err.code 错误码
-					}).finally(() => {
-						this.loading = false;
-						this.complete = true;
-					})
-			},
-
-			navTo(url, id) {
-				if (url.indexOf('http') > -1) {
-					// 如果url中包含'http'，则在新窗口中打开该链接
-					window.open(url);
-				} else {
-					if (id) {
-						// 如果有提供id参数，则将其添加到url中作为查询参数
-						url = `${url}?appid=${id}`;
+				/* 近 30 天客户出货量排名：口径与上方曲线一致（source≠sample + 已发货，打样单不计条数）
+				* 云端已按条数降序取前 N 名，前端只负责渲染；加载失败降级为卡片内文案提示 */
+				async loadCustChart() {
+				this.custChartLoading = true
+				this.custChartError = ''
+				try {
+					const res = await outboundCo.topCustomerOut({ days: 30, limit: 10 })
+					// 云端 ok() 返回 { code, message, data }，列表在 res.data.list
+					const list = (res && res.code === 0 && res.data && res.data.list) || []
+					this.custList = list
+					this.custTotal = list.reduce((s, d) => s + (d.count || 0), 0)
+					this.custChartData = {
+						categories: list.map((d) => d.customer),
+						series: [{
+							name: '出货条数',
+							data: list.map((d) => d.count || 0),
+							/* 柱顶标名称、tooltip 显示数值：uCharts 两处调用本 formatter，传参个数不同
+							 *   柱顶绘制 drawColumePointText → formatter(value, index, series, opts) 有 index → 返回名称
+							 *   tooltip 取数 getSeriesDataItem → item.formatter(value) 无 index → 返回数值
+							 * 靠 index 是否传入区分（tooltip 只传一个参数，index 为 undefined） */
+							formatter: (val, index) => (index === undefined ? val : shortName(list[index] && list[index].customer)),
+							textSize: 10,
+							textColor: '#606266',
+						}],
 					}
-					// 使用uni.navigateTo方法进行页面跳转
-					uni.navigateTo({
-						url
-					});
+				} catch (e) {
+					this.custChartError = (e && e.message) || '加载失败'
+				} finally {
+					this.custChartLoading = false
 				}
-			},
+				},
 
-			toUrl(url) {
+				/* 近 30 天产品（品名）出库排名：口径同上（source≠sample + 已发货，打样单不计条数）
+				* 品名只在明细表，云端已两步联表聚合好并按条数降序取前 N 名 */
+				async loadProdChart() {
+				this.prodChartLoading = true
+				this.prodChartError = ''
+				try {
+					const res = await outboundCo.topProductOut({ days: 30, limit: 10 })
+					const list = (res && res.code === 0 && res.data && res.data.list) || []
+					this.prodList = list
+					this.prodTotal = list.reduce((s, d) => s + (d.count || 0), 0)
+					this.prodChartData = {
+						categories: list.map((d) => d.product),
+						series: [{
+							name: '出库条数',
+							data: list.map((d) => d.count || 0),
+							/* 柱顶标名称、tooltip 显示数值（调用约定同上） */
+							formatter: (val, index) => (index === undefined ? val : shortName(list[index] && list[index].product)),
+							textSize: 10,
+							textColor: '#606266',
+						}],
+					}
+				} catch (e) {
+					this.prodChartError = (e && e.message) || '加载失败'
+				} finally {
+					this.prodChartLoading = false
+				}
+				},
+
+				toUrl(url) {
 				// #ifdef H5
 				// 在新窗口中打开url链接（仅适用于H5平台）
 				window.open(url, "_blank");
@@ -387,6 +296,42 @@
 		font-weight: 600;
 		padding: 10px 0;
 		margin-bottom: 15px;
+	}
+
+	/* 近 30 天出库曲线 */
+	.out-chart-box {
+		height: 260px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.out-chart-tip {
+		font-size: 13px;
+		color: #909399;
+	}
+	.out-chart-tip-err { color: #f56c6c; }
+	.out-chart-total {
+		font-size: 13px;
+		font-weight: 400;
+		color: #909399;
+	}
+
+	/* 排名区：客户 / 产品 左右并排；min-width:0 让 flex 子项可收缩，避免长品名撑破布局 */
+	.rank-row {
+		display: flex;
+		gap: 15px;
+	}
+	.rank-col {
+		flex: 1;
+		min-width: 0;
+	}
+
+	/* 排名柱状图（X 轴标签倾斜，需比曲线图多留高度） */
+	.cust-chart-box {
+		height: 300px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.uni-table-scroll {

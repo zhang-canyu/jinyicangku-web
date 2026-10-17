@@ -241,16 +241,18 @@ const TYPE_KEYS = ['all', 'sales', 'sample', 'direct']
 const STATUS_OPTIONS = ['全部', '待配货', '待确认', '待发货', '已发货', '已完成']
 const STATUS_KEYS = ['all', '待配货', '待确认', '待发货', '已发货', '已完成']
 /* 状态图标：状态文案 → uni-icons type
- * 已发货图标恢复：纸飞机（与「待发货」的 upload 形成「准备→发出」语义链） */
+ * 已发货图标恢复：纸飞机（与「待发货」的 upload 形成「准备→发出」语义链）
+ * 已取消：clear（圆圈叉，表示作废/终止）；statusTag 里未列出的状态一律灰色 */
 const STATUS_ICON = {
 	'待配货': 'spinner-cycle',     // 等待配货（循环）
 	'待确认': 'help-filled',       // 待确认（问号）
 	'待发货': 'upload-filled',     // 待发货（准备送出）
 	'已发货': 'paperplane-filled', // 已发货（飞机已发出）
 	'已完成': 'checkbox-filled',   // 已完成（勾选）
+	'已取消': 'clear',             // 已取消（圆圈叉）
 }
-/* 日期快速预设：0 全部 / 1 今天 / 2 本周(周一~周日) / 3 本月 / 4 近7天 / 5 近30天 */
-const DATE_QUICK_OPTIONS = ['全部', '今天', '本周', '本月', '近7天', '近30天']
+/* 日期快速预设：0 全部 / 1 今天 / 2 昨天 / 3 近7天（含今天）/ 4 近15天（含今天） */
+const DATE_QUICK_OPTIONS = ['全部', '今天', '昨天', '近7天', '近15天']
 
 export default {
 	data() {
@@ -359,7 +361,7 @@ export default {
 		},
 
 		/* 日期快速预设 → startDate/endDate（YYYY-MM-DD），供 buildParams 透传给云端
-		 * 0:全部(无过滤) / 1:今天 / 2:本周(周一~周日) / 3:本月 / 4:近7天 / 5:近30天 */
+		 * 0:全部(无过滤) / 1:今天 / 2:昨天 / 3:近7天(含今天) / 4:近15天(含今天) */
 		getPresetRange(idx) {
 			if (!idx) return null
 			const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -369,17 +371,11 @@ export default {
 			}
 			const shift = (days) => { const d = new Date(today); d.setDate(d.getDate() + days); return d }
 			if (idx === 1) { const s = fmt(today); return { startDate: s, endDate: s } }
-			if (idx === 2) {
-				const diffToMon = (today.getDay() + 6) % 7 // 距本周一的天数
-				return { startDate: fmt(shift(-diffToMon)), endDate: fmt(shift(6 - diffToMon)) }
-			}
-			if (idx === 3) {
-				const first = new Date(today.getFullYear(), today.getMonth(), 1)
-				const last = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-				return { startDate: fmt(first), endDate: fmt(last) }
-			}
-			if (idx === 4) return { startDate: fmt(shift(-6)), endDate: fmt(today) }
-			if (idx === 5) return { startDate: fmt(shift(-29)), endDate: fmt(today) }
+			/* 昨天：单日区间，起止同为今天往前 1 天 */
+			if (idx === 2) { const s = fmt(shift(-1)); return { startDate: s, endDate: s } }
+			/* 近 N 天 = 含今天往前推 N-1 天 */
+			if (idx === 3) return { startDate: fmt(shift(-6)), endDate: fmt(today) }
+			if (idx === 4) return { startDate: fmt(shift(-14)), endDate: fmt(today) }
 			return null
 		},
 
